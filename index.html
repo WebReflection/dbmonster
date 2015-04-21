@@ -5,8 +5,8 @@
   <link rel="stylesheet" href="style.css">
   <!--[if IE 8]>
     <script src="//cdnjs.cloudflare.com/ajax/libs/ie8/0.2.2/ie8.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/es5-shim/4.1.1/es5-shim.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/es5-shim/4.1.1/es5-sham.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/es5-shim/4.1.1/es5-shim.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/es5-shim/4.1.1/es5-sham.js"></script>
   <![endif]-->
 </head>
 <body>
@@ -23,16 +23,25 @@
 
 <script type="text/javascript">
 
-  var requestAnimationFrame = requestAnimationFrame || setTimeout;
+  // simple rAF poly, will fallback with setTimeout(fn, ASAP)
+  var requestAnimationFrame = this.requestAnimationFrame ||
+                              this.webkitRequestAnimationFrame ||
+                              this.mozRequestAnimationFrame ||
+                              this.msRequestAnimationFrame ||
+                              this.oRequestAnimationFrame ||
+                              setTimeout;
 
   var rootNode, updates;
 
-  // shortcut for document.createElement
-  function create(what) {
-    return document.createElement(what);
+  // shortcut for node.appendChild(document.createElement)
+  function append(where, what) {
+    return where.appendChild(
+      (where.ownerDocument || document).createElement(what)
+    );
   }
 
   // recycled function for all updates
+  // used as: a1.forEach(updateInfo, a2)
   function updateInfo(info, i) {
     this[i](info);
   }
@@ -46,22 +55,24 @@
     // we create the table once
     if(rootNode == null) {
 
-      rootNode = create('table');
+      rootNode = append(document.getElementById('body'), 'table');
       rootNode.className = 'table table-striped latest-data';
-      rootNode = rootNode.appendChild(create('tbody'));
+      rootNode = append(rootNode, 'tbody');
 
       // per each data ...
       updates = dbs.map(
         function (db) {
           var
             // create the row
-            tr = rootNode.appendChild(create('tr')),
+            tr = append(rootNode, 'tr'),
             // create all other fields like a static template would do
-            dbName = tr.appendChild(create('td')),
-            queryCount = tr.appendChild(create('td')),
-            countInfo = queryCount.appendChild(create('span')),
-            // map updates for top five queries, pass the row
-            topFiveQueries = db.topFiveQueries.map(this, tr)
+            dbName = append(tr, 'td'),
+            queryCount = append(tr, 'td'),
+            countInfo = append(queryCount, 'span'),
+            // map updates for top five queries, pass this same row
+            topFiveQueries = db.topFiveQueries.map(this, tr),
+            // the cluster name will rarely update, let's store it
+            infoName = ''
           ;
           // setup nodes
           dbName.className = 'dbname';
@@ -69,42 +80,43 @@
           // return a function that will update all of the above
           return function (db) {
             // we update only what we need
-            // we use native DOM methods
-            tr.setAttribute('key', db.name);
-            // we trust automatic HTML escape via native DOM
-            dbName.textContent = db.name;
-            countInfo.className = getCountClassName(db);
+            // and we use native DOM methods
+            if (infoName !== db.name) {
+              infoName = db.name;
+              tr.setAttribute('key', infoName);
+              // we also trust text to HTML escape via native DOM
+              dbName.textContent = infoName;
+            }
             countInfo.textContent = db.queries.length;
+            countInfo.className = getCountClassName(db);
             // we update top five too
             db.topFiveQueries.forEach(updateInfo, topFiveQueries);
           };
         },
-        // recycled function, creates info per each top-five query
+        // non-hoisted, in forEach recycled function
+        // creates info per each top-five query
         function (query) {
           var
-            // the td with its fields
-            td = this.appendChild(create('td')),
-            elapsed = td.appendChild(create('span')),
-            popoverLeft = td.appendChild(create('div')),
-            popoverContent = popoverLeft.appendChild(create('div')),
-            arrow = popoverLeft.appendChild(create('div'))
+            // the query td with its fields
+            td = append(this, 'td'),
+            elapsed = append(td, 'span'),
+            popoverLeft = append(td, 'div'),
+            popoverContent = append(popoverLeft, 'div'),
+            arrow = append(popoverLeft, 'div')
           ;
-          // classes setup
+          // nodes and classes setup
           elapsed.className = 'foo';
           popoverLeft.className = 'popover left';
           popoverContent.className = 'popover-content';
           arrow.className = 'arrow';
-          // we return the function that will update the necessary
+          // we return the function that will update only the necessary
           return function (query) {
-            td.className = 'Query ' + elapsedClassName(query.elapsed);
-            elapsed.textContent = formatElapsed(query.elapsed);
             popoverContent.textContent = query.query;
+            elapsed.textContent = formatElapsed(query.elapsed);
+            td.className = 'Query ' + elapsedClassName(query.elapsed);
           };
         }
       );
-
-      // we append the table once
-      document.getElementById('body').appendChild(rootNode.parentNode);
 
     }
 
